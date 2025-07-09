@@ -1,0 +1,282 @@
+i<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Roleta de Nomes com Timer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 30px;
+    }
+    textarea {
+      width: 300px;
+      height: 150px;
+    }
+    button, input[type="text"] {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 1em;
+    }
+    .step {
+      display: none;
+    }
+    .active {
+      display: block;
+    }
+    .used {
+      opacity: 0.4;
+      text-decoration: line-through;
+    }
+
+    .columns {
+      display: flex;
+      justify-content: space-around;
+      align-items: flex-start;
+      gap: 20px;
+      margin-top: 60px;
+      flex-wrap: wrap;
+    }
+    .column {
+      flex: 1;
+      min-width: 250px;
+    }
+    #wheelContainer {
+      position: relative;
+      display: inline-block;
+    }
+    #wheelCanvas {
+      max-width: 100%;
+    }
+    #pointer {
+      width: 0;
+      height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-top: 30px solid red;
+      position: absolute;
+      top: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+    }
+    #selectedNameBanner {
+      font-size: 2em;
+      font-weight: bold;
+      margin: 20px 0;
+      color: #fff;
+      padding: 15px;
+      border-radius: 10px;
+    }
+    #timerDisplay {
+      font-size: 2.5em;
+      color: #e63946;
+    }
+    #nameListDisplay {
+      list-style: none;
+      padding: 0;
+      text-align: left;
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/zarocknz/javascript-winwheel@2.7.0/Winwheel.min.js"></script>
+</head>
+<body>
+
+  <h1>Roleta de Nomes com Timer</h1>
+
+  <!-- Etapa 1 -->
+  <div id="step1" class="step active">
+    <p>Insira um nome por linha:</p>
+    <textarea id="nameList"></textarea><br>
+    <label>Tempo por pessoa (mm:ss): </label>
+    <input type="text" id="timeInput" value="01:00" pattern="\\d{1,2}:\\d{2}" title="Formato: mm:ss"><br>
+    <button onclick="initializeNamesAndGoToWheel()">Avançar</button>
+  </div>
+
+  <!-- Etapa 3 -->
+  <div id="step3" class="step">
+    <div id="selectedNameBanner"></div>
+
+    <div class="columns">
+      <!-- Coluna 1: Roleta -->
+      <div class="column">
+        <div id="wheelContainer">
+          <div id="pointer"></div>
+          <canvas id="wheelCanvas" width="500" height="500"></canvas>
+        </div>
+        <br>
+        <button onclick="spinWheel()">SPIN</button>
+      </div>
+
+      <!-- Coluna 2: Timer e nome -->
+      <div class="column">
+        <button onclick="startTimer()">Iniciar Timer</button>
+        <div id="timerDisplay">00:00</div>
+      </div>
+
+      <!-- Coluna 3: Lista de nomes -->
+      <div class="column">
+        <h3>Participantes</h3>
+        <ul id="nameListDisplay"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let remainingNames = [];
+    let allNames = [];
+    let selectedName = "";
+    let nameColors = {};
+    let timer;
+    let currentTime = 0;
+    let theWheel;
+
+    function getColorForName(name) {
+      let hash = 0;
+      for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return `hsl(${hash % 360}, 70%, 60%)`;
+    }
+
+    function goToStep(step) {
+      document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+      document.getElementById(`step${step}`).classList.add('active');
+    }
+
+    function initializeNamesAndGoToWheel() {
+      initializeNames();
+      if (remainingNames.length === 0) return;
+      goToStep(3);
+      setTimeout(() => {
+        createWheel();
+      }, 100);
+    }
+
+    function initializeNames() {
+      const input = document.getElementById("nameList").value.trim().split("\n").filter(n => n.trim() !== "");
+      if (input.length === 0) {
+        alert("Insira ao menos um nome.");
+        return;
+      }
+      allNames = [...input];
+      remainingNames = [...input];
+
+      nameColors = {};
+      allNames.forEach(name => {
+        nameColors[name] = getColorForName(name);
+      });
+
+      updateNameListDisplay();
+    }
+
+    function updateNameListDisplay() {
+      const ul = document.getElementById("nameListDisplay");
+      ul.innerHTML = "";
+      allNames.forEach(name => {
+        const li = document.createElement("li");
+        li.textContent = name;
+        li.id = `name-${name.replace(/\s+/g, "_")}`;
+        li.style.color = nameColors[name] || "#000";
+        if (!remainingNames.includes(name)) li.classList.add("used");
+        ul.appendChild(li);
+      });
+    }
+
+    function createWheel() {
+      const canvas = document.getElementById("wheelCanvas");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (remainingNames.length === 0) {
+        return;
+      }
+
+      const segments = remainingNames.map(name => ({
+        text: name,
+        fillStyle: nameColors[name] || "#ccc"
+      }));
+
+      if (theWheel && theWheel.stopAnimation) {
+        theWheel.stopAnimation(false);
+        theWheel = null;
+      }
+
+      theWheel = new Winwheel({
+        canvasId: 'wheelCanvas',
+        numSegments: segments.length,
+        segments: segments,
+        animation: {
+          type: 'spinToStop',
+          duration: 5,
+          spins: 8,
+          callbackFinished: alertSelectedName
+        },
+        pins: true
+      });
+    }
+
+    function spinWheel() {
+      if (!theWheel || theWheel.segments.length === 0) {
+        alert("Todos os nomes já foram sorteados!");
+        return;
+      }
+      theWheel.startAnimation();
+    }
+
+    function alertSelectedName(indicatedSegment) {
+      selectedName = indicatedSegment.text;
+      document.getElementById("selectedNameBanner").textContent = `🎯 Sorteado: ${selectedName}`;
+      document.getElementById("selectedNameBanner").style.backgroundColor = nameColors[selectedName] || "#eee";
+
+      if (timer) clearInterval(timer);
+      document.getElementById("timerDisplay").textContent = "00:00";
+
+      document.getElementById(`name-${selectedName.replace(/\s+/g, "_")}`)?.classList.add("used");
+      remainingNames = remainingNames.filter(name => name !== selectedName);
+      updateNameListDisplay();
+
+      setTimeout(() => {
+        createWheel();
+      }, 500);
+    }
+
+    function startTimer() {
+      const timeStr = document.getElementById("timeInput").value.trim();
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+      if (!selectedName) {
+        alert("Sorteie um nome primeiro.");
+        return;
+      }
+      if (!match) {
+        alert("Formato de tempo inválido. Use mm:ss");
+        return;
+      }
+
+      const minutes = parseInt(match[1], 10);
+      const seconds = parseInt(match[2], 10);
+      currentTime = minutes * 60 + seconds;
+
+      if (timer) clearInterval(timer);
+      document.getElementById("timerDisplay").textContent = formatTime(currentTime);
+      timer = setInterval(() => {
+        currentTime--;
+        document.getElementById("timerDisplay").textContent = formatTime(currentTime);
+        if (currentTime <= 0) {
+          clearInterval(timer);
+          alert("⏰ Tempo esgotado!");
+        }
+      }, 1000);
+    }
+
+    function formatTime(s) {
+      const m = String(Math.floor(s / 60)).padStart(2, '0');
+      const sec = String(s % 60).padStart(2, '0');
+      return `${m}:${sec}`;
+    }
+  </script>
+
+</body>
+</html>
