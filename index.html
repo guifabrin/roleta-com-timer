@@ -113,6 +113,7 @@
       <!-- Coluna 2: Timer e nome -->
       <div class="column">
         <button onclick="startTimer()">Iniciar Timer</button>
+        <button onclick="togglePauseTimer()" id="pauseButton" disabled>Pausar Timer</button>
         <div id="timerDisplay">00:00</div>
       </div>
 
@@ -131,6 +132,8 @@
     let nameColors = {};
     let timer;
     let currentTime = 0;
+    let isPaused = false;
+    let pauseButton = null;
     let theWheel;
 
     function getColorForName(name) {
@@ -233,6 +236,7 @@
 
       if (timer) clearInterval(timer);
       document.getElementById("timerDisplay").textContent = "00:00";
+      document.getElementById("pauseButton").disabled = true;
 
       document.getElementById(`name-${selectedName.replace(/\s+/g, "_")}`)?.classList.add("used");
       remainingNames = remainingNames.filter(name => name !== selectedName);
@@ -258,17 +262,33 @@
       const minutes = parseInt(match[1], 10);
       const seconds = parseInt(match[2], 10);
       currentTime = minutes * 60 + seconds;
+      isPaused = false;
+
+      document.getElementById("timerDisplay").textContent = formatTime(currentTime);
 
       if (timer) clearInterval(timer);
+      timer = setInterval(runTimerTick, 1000);
+
+      pauseButton = document.getElementById("pauseButton");
+      pauseButton.disabled = false;
+      pauseButton.textContent = "Pausar Timer";
+    }
+
+    function runTimerTick() {
+      if (isPaused) return;
+      currentTime--;
       document.getElementById("timerDisplay").textContent = formatTime(currentTime);
-      timer = setInterval(() => {
-        currentTime--;
-        document.getElementById("timerDisplay").textContent = formatTime(currentTime);
-        if (currentTime <= 0) {
-          clearInterval(timer);
-          alert("⏰ Tempo esgotado!");
-        }
-      }, 1000);
+      if (currentTime <= 0) {
+        clearInterval(timer);
+        document.getElementById("pauseButton").disabled = true;
+        alert("⏰ Tempo esgotado!");
+      }
+    }
+
+    function togglePauseTimer() {
+      if (!timer) return;
+      isPaused = !isPaused;
+      pauseButton.textContent = isPaused ? "Continuar Timer" : "Pausar Timer";
     }
 
     function formatTime(s) {
